@@ -24,17 +24,25 @@ set -eo pipefail
 # and before the binfmt drop-in re-registers.
 command -v reg.exe >/dev/null 2>&1 || exit 0
 
+# Hard-cap reg.exe at 5s. The interop path can hang indefinitely if
+# WSLInterop binfmt is wedged or the Windows side is congested —
+# without this wrapper the systemd .service never returns, the unit
+# stays in `activating start`, and the next minute's .timer fire
+# stacks up behind it. `timeout 5` returns 124 on hit; we treat
+# that as "no answer this minute, try again later."
+#
 # Pure-bash field extraction so the script has no awk/gawk runtime
-# dep. Fedora WSL's minimal image ships without awk by default.
+# dep — Fedora WSL's minimal image ships without awk by default.
 val=
 while IFS= read -r line; do
   case "$line" in
     *AppsUseLightTheme*) val="${line##* }"; break ;;
   esac
-done < <(reg.exe query \
+done < <(timeout 5 reg.exe query \
            'HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize' \
            /v AppsUseLightTheme 2>/dev/null \
          | tr -d '\r')
+[ -n "$val" ] || exit 0
 
 case "$val" in
   0x0)  # Dark
@@ -63,11 +71,15 @@ if command -v gsettings >/dev/null 2>&1 \
    && [ -n "${XDG_RUNTIME_DIR:-}" ] \
    && [ -S "${XDG_RUNTIME_DIR}/dbus/system_bus_socket" \
         -o -S "${XDG_RUNTIME_DIR}/bus" ]; then
-  cur=$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null \
+  # Each gsettings call hits the user dbus session bus → dconf-service.
+  # If the bus is congested (e.g., portal is crashlooping), these
+  # would normally hang for ~25s on dbus's default reply timeout.
+  # `timeout 3` per call keeps the whole tier under 10s worst-case.
+  cur=$(timeout 3 gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null \
         | tr -d "'")
   if [ -n "$cur" ] && [ "$cur" != "$want_scheme" ]; then
-    gsettings set org.gnome.desktop.interface color-scheme "$want_scheme"
-    gsettings set org.gnome.desktop.interface gtk-theme    "$want_gtk"
+    timeout 3 gsettings set org.gnome.desktop.interface color-scheme "$want_scheme" 2>/dev/null || true
+    timeout 3 gsettings set org.gnome.desktop.interface gtk-theme    "$want_gtk"    2>/dev/null || true
     changed=1
   fi
 fi

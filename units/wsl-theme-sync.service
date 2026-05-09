@@ -9,6 +9,14 @@ After=default.target
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/wsl-theme-sync
+# Strict ceiling — the script wraps reg.exe + each gsettings call in
+# `timeout 3`, so a healthy run completes in well under a second. 15s
+# is "something is genuinely wedged, kill rather than queue the next
+# .timer fire behind a hung instance." Without this, a hung run
+# leaves the unit in `activating start` indefinitely, blocking
+# subsequent fires and eventually starving dbus traffic on the user
+# bus.
+TimeoutStartSec=15
 
 [Install]
 WantedBy=default.target
