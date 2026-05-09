@@ -75,6 +75,15 @@ QOL_THEME_SYNC=0      # skip theme sync timer
 | `~/.config/systemd/user/wslg-pulse-detach.service` | Renumbered-user pulse fix |
 | `/var/lib/wsl-flatpak-wslg-sync/<user>.list` | Sync manifest for cleanup-on-uninstall |
 
+## Tested on
+
+| Distro              | WSL version | Notes                          |
+| ------------------- | ----------- | ------------------------------ |
+| Fedora Linux 44     | 2.7.3.0     | Primary development target.    |
+
+If you've run this on a different distro/WSL combination and it
+worked (or didn't), open a PR/issue extending this table.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
