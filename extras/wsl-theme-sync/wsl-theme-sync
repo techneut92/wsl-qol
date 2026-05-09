@@ -24,11 +24,17 @@ set -eo pipefail
 # and before the binfmt drop-in re-registers.
 command -v reg.exe >/dev/null 2>&1 || exit 0
 
-val=$(reg.exe query \
-        'HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize' \
-        /v AppsUseLightTheme 2>/dev/null \
-      | awk '/AppsUseLightTheme/{print $NF}' \
-      | tr -d '\r')
+# Pure-bash field extraction so the script has no awk/gawk runtime
+# dep. Fedora WSL's minimal image ships without awk by default.
+val=
+while IFS= read -r line; do
+  case "$line" in
+    *AppsUseLightTheme*) val="${line##* }"; break ;;
+  esac
+done < <(reg.exe query \
+           'HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize' \
+           /v AppsUseLightTheme 2>/dev/null \
+         | tr -d '\r')
 
 case "$val" in
   0x0)  # Dark

@@ -19,8 +19,23 @@
 setup_flatpak_remotes() {
   ui_step "Flatpak remotes (flathub)"
   if ! command -v flatpak >/dev/null 2>&1; then
-    ui_skip "flatpak not installed — skipping (install via your package manager first)"
-    return 0
+    # Auto-install flatpak rather than skipping silently — Fedora's
+    # minimal WSL image (and Debian's, depending on tasksel) doesn't
+    # include it. detect_distro has already populated DISTRO_FAMILY.
+    case "${DISTRO_FAMILY:-}" in
+      fedora-like)
+        ui_spin "Install flatpak (dnf)" \
+          sudo dnf -y install flatpak
+        ;;
+      debian-like)
+        ui_spin "Install flatpak (apt)" \
+          sudo apt-get install -y --no-install-recommends flatpak
+        ;;
+      *)
+        ui_skip "flatpak not installed and distro family unknown — skipping"
+        return 0
+        ;;
+    esac
   fi
 
   # See companion comment in install_wslg_flatpak_sync for why the
