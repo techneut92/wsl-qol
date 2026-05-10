@@ -63,12 +63,23 @@ fi
 #
 # Pure-bash field extraction so the script has no awk/gawk runtime
 # dep — Fedora WSL's minimal image ships without awk by default.
+# reg.exe is fork-exec'd through /init's WSLInterop bridge, which
+# translates the caller's Linux cwd to a Windows UNC path
+# (\\wsl.localhost\<distro>\…) and hands it to the Windows process.
+# That translation aborts with "Invalid argument" when the cwd
+# contains a dot-prefixed component (~/.config, ~/.local/share, …).
+# The RDP installer re-execs itself out of ~/.local/share/wsl-gnome-rdp-installer,
+# so apply_theme_sync's invocation lands here exactly. Push cwd to a
+# known-safe path (`/`) for the duration of the reg.exe call so the
+# interop bridge always gets a translatable cwd. Restored on subshell
+# exit; the rest of the script continues from wherever the caller
+# was.
 val=
 while IFS= read -r line; do
   case "$line" in
     *AppsUseLightTheme*) val="${line##* }"; break ;;
   esac
-done < <(timeout 5 reg.exe query \
+done < <(cd / && timeout 5 reg.exe query \
            'HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize' \
            /v AppsUseLightTheme 2>/dev/null \
          | tr -d '\r')
@@ -211,8 +222,14 @@ fi
 # need a session restart to drop the inherited override.
 if command -v systemctl >/dev/null 2>&1 \
    && [ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/systemd/private" ]; then
+  # `|| true` because grep returns 1 when GTK_THEME is absent (steady
+  # state after the cleanup has already run once) — without it, set -e
+  # combined with pipefail kills the whole script at the no-match,
+  # *before* the trailing summary line prints. ui_spin then reports
+  # the run as failed even though every preceding tier wrote
+  # correctly. Bit me on the install pipeline.
   cur_gtk_env=$(timeout 3 systemctl --user show-environment 2>/dev/null \
-                | grep '^GTK_THEME=' | cut -d= -f2-)
+                | grep '^GTK_THEME=' | cut -d= -f2- || true)
   if [ -n "$cur_gtk_env" ]; then
     systemctl --user set-environment GTK_THEME= 2>/dev/null || true
     changed=1
