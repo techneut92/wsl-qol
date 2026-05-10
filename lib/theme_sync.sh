@@ -32,6 +32,30 @@
 # looks green" while color-scheme actually never propagates.
 oneshot_theme_sync() {
   ui_step "Theme sync (initial Windows → Linux mirror)"
+
+  # Ensure the runtime deps. Stripped Fedora/Debian WSL images don't
+  # carry these by default, and without them tier 1 of the sync
+  # script (the gsettings write) silently no-ops — leaving libadwaita
+  # apps stuck on the default light scheme even though Windows is
+  # dark. glib2 provides the `gsettings` binary, dconf is the
+  # backing store, gsettings-desktop-schemas registers the
+  # org.gnome.desktop.interface schema. Best-effort: a missing
+  # package manager just means the user's distro isn't one we
+  # auto-install on, and the schema-presence check below still
+  # correctly skips with a clear "defer to caller" message.
+  case "$DISTRO_FAMILY" in
+    debian-like)
+      sudo apt-get install -y -qq \
+        glib2.0-bin dconf-cli gsettings-desktop-schemas \
+        >/dev/null 2>&1 || true
+      ;;
+    fedora-like)
+      sudo dnf install -y -q \
+        glib2 dconf gsettings-desktop-schemas \
+        >/dev/null 2>&1 || true
+      ;;
+  esac
+
   ui_spin "Install /usr/local/bin/wsl-theme-sync" \
     sudo install -m 755 \
       "$PROJECT_ROOT/extras/wsl-theme-sync/wsl-theme-sync" \
