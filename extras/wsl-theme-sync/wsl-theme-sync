@@ -7,9 +7,8 @@
 # config sources are useful in this distro:
 #
 #   tier 1 — gsettings           (only if dconf + GNOME running)
-#   tier 2 — GTK 3 + 4 settings  (~/.config/gtk-{3,4}.0/settings.ini)
+#   tier 2 — GTK 3 settings.ini  (~/.config/gtk-3.0/settings.ini)
 #   tier 3 — Qt qt6ct config     (~/.config/qt6ct/qt6ct.conf, if dir exists)
-#   tier 4 — env.d GTK_THEME     (~/.config/environment.d/45-theme.conf)
 #
 # This makes the script DE-agnostic: works on a pure WSLg setup
 # (per-app GUI through Windows Start Menu, no compositor), on GNOME,
@@ -17,6 +16,20 @@
 # apply (or doesn't change). Companion .timer fires it every minute,
 # so toggling Windows theme propagates within 60s — no app restart
 # needed for portal-aware GTK apps.
+#
+# What we DON'T touch (and why):
+#   * GTK4 settings.ini's gtk-application-prefer-dark-theme
+#     libadwaita explicitly rejects this key (warns at runtime) and
+#     reads color-scheme from the portal/gsettings instead. Writing it
+#     was harmless on GTK3, harmful-no-op on GTK4.
+#   * env.d GTK_THEME=Adwaita-dark
+#     libadwaita refuses to apply its stylesheet when gtk-theme-name
+#     is anything but its allowlist (Adwaita, HighContrast, Default,
+#     empty). A hammer env override of "Adwaita-dark" turned every
+#     libadwaita app into pseudo-fallback CSS — pill buttons rendered
+#     as rectangles, Adw.StatusPage illustrations dropped to small
+#     symbolic icons. The previous tier-4 fallback was net-harmful.
+# Both are actively scrubbed below if found from older revisions.
 
 set -eo pipefail
 
@@ -67,13 +80,11 @@ fi
 case "$val" in
   0x0)  # Dark
     want_scheme=prefer-dark
-    want_gtk=Adwaita-dark
     want_gtk_prefer_dark=1
     want_qt_style=Adwaita-Dark
     ;;
   0x1)  # Light
     want_scheme=default
-    want_gtk=Adwaita
     want_gtk_prefer_dark=0
     want_qt_style=Adwaita
     ;;
@@ -81,6 +92,9 @@ case "$val" in
     exit 0  # registry indeterminate — silent no-op
     ;;
 esac
+# gtk-theme is ALWAYS Adwaita — variant comes from color-scheme
+# (libadwaita) and gtk-application-prefer-dark-theme (GTK3). See header.
+want_gtk=Adwaita
 
 changed=0
 
@@ -95,23 +109,33 @@ if command -v gsettings >/dev/null 2>&1 \
   # If the bus is congested (e.g., portal is crashlooping), these
   # would normally hang for ~25s on dbus's default reply timeout.
   # `timeout 3` per call keeps the whole tier under 10s worst-case.
-  cur=$(timeout 3 gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null \
-        | tr -d "'")
-  if [ -n "$cur" ] && [ "$cur" != "$want_scheme" ]; then
+  #
+  # color-scheme and gtk-theme are checked independently so drift in
+  # either gets corrected — earlier revisions wrote gtk-theme=Adwaita-dark
+  # which sticks in dconf even after the bug fix lands. Without an
+  # independent normalization pass, libadwaita stays broken until the
+  # user toggles Windows theme.
+  cur_scheme=$(timeout 3 gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null \
+               | tr -d "'")
+  if [ -n "$cur_scheme" ] && [ "$cur_scheme" != "$want_scheme" ]; then
     timeout 3 gsettings set org.gnome.desktop.interface color-scheme "$want_scheme" 2>/dev/null || true
-    timeout 3 gsettings set org.gnome.desktop.interface gtk-theme    "$want_gtk"    2>/dev/null || true
+    changed=1
+  fi
+  cur_gtk=$(timeout 3 gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null \
+            | tr -d "'")
+  if [ -n "$cur_gtk" ] && [ "$cur_gtk" != "$want_gtk" ]; then
+    timeout 3 gsettings set org.gnome.desktop.interface gtk-theme "$want_gtk" 2>/dev/null || true
     changed=1
   fi
 fi
 
-# ----- tier 2: GTK 3 + 4 settings.ini ----------------------------------
-# Read by every GTK 3/4 app via the legacy code path. libadwaita apps
-# also fall through to this when no portal answers a color-scheme query.
-write_gtk_ini() {
+# ----- tier 2: GTK 3 settings.ini --------------------------------------
+# Read by every GTK 3 app via the legacy code path. GTK4/libadwaita
+# does NOT participate — see header.
+write_gtk3_ini() {
   local path=$1 want=$2
   install -d "$(dirname "$path")"
   if [ -f "$path" ]; then
-    # Update existing key in [Settings] OR add to file
     if grep -q '^\[Settings\]' "$path"; then
       if grep -q '^gtk-application-prefer-dark-theme=' "$path"; then
         local cur
@@ -125,7 +149,6 @@ write_gtk_ini() {
       return 0
     fi
   fi
-  # File missing or no [Settings] section → write fresh-ish
   {
     [ -f "$path" ] && cat "$path"
     printf '\n[Settings]\ngtk-application-prefer-dark-theme=%s\n' "$want"
@@ -133,8 +156,20 @@ write_gtk_ini() {
   mv "$path.tmp" "$path"
   changed=1
 }
-write_gtk_ini "$HOME/.config/gtk-3.0/settings.ini" "$want_gtk_prefer_dark"
-write_gtk_ini "$HOME/.config/gtk-4.0/settings.ini" "$want_gtk_prefer_dark"
+write_gtk3_ini "$HOME/.config/gtk-3.0/settings.ini" "$want_gtk_prefer_dark"
+
+# Forward-fix: scrub gtk-application-prefer-dark-theme from GTK4's
+# settings.ini if an older revision wrote it. libadwaita warns about
+# the key and the surrounding side-effects break its stylesheet.
+gtk4_ini=$HOME/.config/gtk-4.0/settings.ini
+if [ -f "$gtk4_ini" ] && grep -q '^gtk-application-prefer-dark-theme=' "$gtk4_ini"; then
+  sed -i '/^gtk-application-prefer-dark-theme=/d' "$gtk4_ini"
+  # If the file is now just `[Settings]` + whitespace, drop it.
+  if ! grep -qvE '^(\[Settings\]|\s*)$' "$gtk4_ini"; then
+    rm -f "$gtk4_ini"
+  fi
+  changed=1
+fi
 
 # ----- tier 3: Qt qt6ct.conf ------------------------------------------
 # qt6ct is the standard "Qt Configuration Tool" used to set Qt platform
@@ -154,13 +189,34 @@ if [ -d "$(dirname "$qt6ct_conf")" ]; then
   fi
 fi
 
-# ----- tier 4: env.d GTK_THEME (fallback for non-portal-aware apps) ---
+# ----- forward-fix: drop legacy env.d GTK_THEME ------------------------
+# Older revisions wrote GTK_THEME=Adwaita-dark here as a "fallback for
+# non-portal-aware apps". That env var is a hard process-wide override
+# and disabled libadwaita's stylesheet on every GTK4 app launched from
+# the user systemd session. Active cleanup only — we don't write here
+# anymore. Also unset it from the live user-manager environment so
+# already-inherited shells/apps drop the override on next launch.
 env_path=$HOME/.config/environment.d/45-theme.conf
-expected="GTK_THEME=$want_gtk"
-if [ ! -f "$env_path" ] || ! grep -q "^$expected$" "$env_path"; then
-  install -d "$(dirname "$env_path")"
-  printf '# Auto-managed by wsl-theme-sync — do not edit by hand.\n%s\n' "$expected" > "$env_path"
+if [ -f "$env_path" ]; then
+  rm -f "$env_path"
   changed=1
+fi
+# Clear GTK_THEME from the live user-manager env independently of the
+# file — a previous manager start imported the bad value into the env
+# table, so deleting the file alone leaves the table dirty until the
+# next wsl --shutdown. `unset-environment` is broken on Fedora 44's
+# systemd (exits 0 but leaves the var), so use `set-environment KEY=`
+# which works and is treated by GTK as no override. Doesn't reach
+# already-running processes (notably gnome-shell-headless) — those
+# need a session restart to drop the inherited override.
+if command -v systemctl >/dev/null 2>&1 \
+   && [ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/systemd/private" ]; then
+  cur_gtk_env=$(timeout 3 systemctl --user show-environment 2>/dev/null \
+                | grep '^GTK_THEME=' | cut -d= -f2-)
+  if [ -n "$cur_gtk_env" ]; then
+    systemctl --user set-environment GTK_THEME= 2>/dev/null || true
+    changed=1
+  fi
 fi
 
 [ "$changed" = "1" ] \
