@@ -1,17 +1,23 @@
 #!/bin/bash
 # install.sh — wsl-qol entry point.
 #
-# Layered, opt-out via env; runs everything by default. Each tier is
-# independently useful: enable the WSLInterop binfmt drop-in even on a
-# headless terminal-only WSL distro, install flatpak Start-Menu sync
-# even without a desktop environment, etc.
+# Layered, mostly opt-out via env. Each tier is independently useful:
+# enable the WSLInterop binfmt drop-in even on a headless terminal-only
+# WSL distro, install flatpak Start-Menu sync even without a desktop
+# environment, etc.
 #
-# Env knobs (all default to 1):
-#   QOL_BINFMT=0/1          /etc/binfmt.d/WSLInterop.conf + reload
-#   QOL_FLATPAK=0/1         flathub remotes (system+user) + /tmp deny
-#   QOL_FLATPAK_SYNC=0/1    .desktop+icon mirror to /usr/share via 5min timer
-#   QOL_PULSE_DETACH=0/1    user oneshot to detach WSLg's pulse symlink
-#   QOL_THEME_SYNC=0/1      systemd user .timer that mirrors Windows theme
+# Env knobs:
+#   QOL_BINFMT=0/1          [default 1] /etc/binfmt.d/WSLInterop.conf + reload
+#   QOL_FLATPAK=0/1         [default 1] flathub remotes (system+user) + /tmp deny
+#   QOL_FLATPAK_SYNC=0/1    [default 1] .desktop+icon mirror to /usr/share via 1min timer
+#   QOL_PULSE_DETACH=0/1    [default 1] user oneshot to detach WSLg's pulse symlink
+#   QOL_THEME_SYNC=0/1      [default 0] OPT-IN — systemd user .timer that mirrors
+#                                       Windows light/dark into GTK/gsettings/.ini.
+#                                       Off by default because it overwrites the
+#                                       user's GNOME theme + GTK_THEME env every
+#                                       minute; users who customize their RDP
+#                                       desktop theme don't want that. Enable
+#                                       with QOL_THEME_SYNC=1.
 #
 #   QOL_NONINTERACTIVE=1    suppress prompts (none today; reserved)
 
@@ -51,11 +57,12 @@ ui_phase "WSL QOL"
 [ "${QOL_FLATPAK:-1}" = "1" ]      && setup_flatpak_remotes
 [ "${QOL_FLATPAK_SYNC:-1}" = "1" ] && install_wslg_flatpak_sync
 [ "${QOL_PULSE_DETACH:-1}" = "1" ] && install_wslg_pulse_detach
-[ "${QOL_THEME_SYNC:-1}" = "1" ]   && install_theme_sync
+# Theme-sync default OFF — opt-in via QOL_THEME_SYNC=1.
+[ "${QOL_THEME_SYNC:-0}" = "1" ]   && install_theme_sync
 
 # Initial fire of the sync units so the user sees results without a reboot.
 [ "${QOL_FLATPAK_SYNC:-1}" = "1" ] && initial_flatpak_sync_run
-[ "${QOL_THEME_SYNC:-1}" = "1" ]   && initial_theme_sync_run
+[ "${QOL_THEME_SYNC:-0}" = "1" ]   && initial_theme_sync_run
 
 ui_phase "Done"
 ui_ok "WSL QOL installed"
