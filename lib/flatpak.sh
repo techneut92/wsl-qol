@@ -78,10 +78,11 @@ install_wslg_flatpak_sync() {
   # which the publisher ignores. Sync those files into /usr/share so
   # they appear in the Windows Start Menu.
   #
-  # Mechanism: a 5-min systemd user timer fires the sync service. The
-  # script is manifest-diffed and near-instant when nothing changed,
-  # so steady-state cost is negligible. Trade-off: a newly-installed
-  # flatpak takes up to 5 min to appear in the Start Menu.
+  # Mechanism: a 1-min systemd user timer fires the sync service. The
+  # script is manifest-diffed and near-instant when nothing changed
+  # (typically <50ms no-op), so steady-state cost is negligible.
+  # Trade-off: a newly-installed flatpak takes up to 1 min to appear
+  # in the Start Menu.
   #
   # An earlier version used a `.path` watcher on the flatpak exports
   # dir. That stormed the sudo'd sync service during flatpak installs
@@ -118,7 +119,7 @@ install_wslg_flatpak_sync() {
     "$SYSTEMD_USER_DIR/wsl-flatpak-wslg-sync.timer"
 
   systemctl --user daemon-reload
-  ui_spin "Enable wsl-flatpak-wslg-sync.timer (5min)" \
+  ui_spin "Enable wsl-flatpak-wslg-sync.timer (1min)" \
     systemctl --user enable --now wsl-flatpak-wslg-sync.timer
 }
 
