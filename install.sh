@@ -8,10 +8,13 @@
 #
 # Env knobs:
 #   QOL_BINFMT=0/1          [default 1] /etc/binfmt.d/WSLInterop.conf + reload
-#   QOL_WSLU=0/1            [default 1] wslu (provides wslview — forwards
-#                                       xdg-open URLs to Windows browser, fixes
-#                                       az login / gh auth login on stripped WSL).
-#                                       Auto-enables atim/wslu COPR on Fedora.
+#   QOL_WSLU=0/1            [default 1] wslview — forwards xdg-open URLs to
+#                                       Windows browser, fixes az login / gh
+#                                       auth login on stripped WSL distros.
+#                                       Debian-like: real wslu from main repos.
+#                                       Fedora-like: minimal shim at
+#                                       /usr/local/bin/wslview (no COPR — the
+#                                       upstream COPR's chroots lag releases).
 #   QOL_XDG_DIRS=0/1        [default 1] populate ~/.config/user-dirs.dirs with
 #                                       the standard XDG dirs + create a
 #                                       ~/Projects folder. Desktop-agnostic —
