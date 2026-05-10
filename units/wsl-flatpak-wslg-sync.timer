@@ -1,0 +1,24 @@
+[Unit]
+Description=Periodically sync user flatpak exports to /usr/share for WSLg
+Documentation=https://github.com/techneut92/wsl-gnome-rdp-installer
+
+[Timer]
+# Replaces the previous .path watcher (PathChanged on flatpak exports).
+# The .path approach stormed the sudo'd sync service during flatpak
+# Firefox/ONLYOFFICE installs and again on every gnome-shell XDG state
+# change, contending with pop-shell verification.
+#
+# 5min cadence: the sync script is manifest-diffed and near-instant when
+# nothing changed, so steady-state cost is negligible. Trade-off: new
+# flatpak installs take up to 5 min to appear in the Windows Start Menu.
+# initial_flatpak_sync_run still fires once at end of install for
+# immediate publishing of whatever's there.
+OnUnitActiveSec=5min
+AccuracySec=30s
+# First fire 5 min AFTER timer activation, NOT relative to boot — so
+# enabling --now during install does not trigger a sync mid-install.
+# (No OnStartupSec/OnBootSec on purpose.)
+Persistent=true
+
+[Install]
+WantedBy=default.target

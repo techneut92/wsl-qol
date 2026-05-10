@@ -77,6 +77,17 @@ install_wslg_flatpak_sync() {
   # per-user installs land in ~/.local/share/flatpak/exports/share/...
   # which the publisher ignores. Sync those files into /usr/share so
   # they appear in the Windows Start Menu.
+  #
+  # Mechanism: a 5-min systemd user timer fires the sync service. The
+  # script is manifest-diffed and near-instant when nothing changed,
+  # so steady-state cost is negligible. Trade-off: a newly-installed
+  # flatpak takes up to 5 min to appear in the Start Menu.
+  #
+  # An earlier version used a `.path` watcher on the flatpak exports
+  # dir. That stormed the sudo'd sync service during flatpak installs
+  # and gnome-shell XDG churn — it contended with pop-shell verification
+  # and caused regressions in the wsl-gnome-rdp-installer pipeline. The
+  # timer is debounced by construction.
   ui_step "WSLg flatpak auto-publish"
   ui_spin "Install /usr/local/bin/wsl-flatpak-wslg-sync" \
     sudo install -m 755 \
@@ -88,16 +99,27 @@ install_wslg_flatpak_sync() {
       /etc/sudoers.d/wsl-flatpak-wslg-sync
 
   install -d -m 755 "$SYSTEMD_USER_DIR"
-  install -m 644 \
-    "$PROJECT_ROOT/units/wsl-flatpak-wslg-sync.path" \
-    "$SYSTEMD_USER_DIR/wsl-flatpak-wslg-sync.path"
+
+  # Migration: any prior install enabled wsl-flatpak-wslg-sync.path.
+  # Disable + remove it so the new timer is the sole trigger. Quiet
+  # output — first install on a clean distro has nothing to clean up.
+  if [ -f "$SYSTEMD_USER_DIR/wsl-flatpak-wslg-sync.path" ]; then
+    ui_spin "Migrate: disable obsolete .path watcher" \
+      systemctl --user disable --now wsl-flatpak-wslg-sync.path
+    rm -f "$SYSTEMD_USER_DIR/wsl-flatpak-wslg-sync.path" \
+          "$SYSTEMD_USER_DIR/default.target.wants/wsl-flatpak-wslg-sync.path"
+  fi
+
   install -m 644 \
     "$PROJECT_ROOT/units/wsl-flatpak-wslg-sync.service" \
     "$SYSTEMD_USER_DIR/wsl-flatpak-wslg-sync.service"
+  install -m 644 \
+    "$PROJECT_ROOT/units/wsl-flatpak-wslg-sync.timer" \
+    "$SYSTEMD_USER_DIR/wsl-flatpak-wslg-sync.timer"
 
   systemctl --user daemon-reload
-  ui_spin "Enable wsl-flatpak-wslg-sync.path" \
-    systemctl --user enable --now wsl-flatpak-wslg-sync.path
+  ui_spin "Enable wsl-flatpak-wslg-sync.timer (5min)" \
+    systemctl --user enable --now wsl-flatpak-wslg-sync.timer
 }
 
 # Initial run after install. Drives the "wsl -t" hint export so the

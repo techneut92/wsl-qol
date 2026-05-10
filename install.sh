@@ -9,7 +9,7 @@
 # Env knobs (all default to 1):
 #   QOL_BINFMT=0/1          /etc/binfmt.d/WSLInterop.conf + reload
 #   QOL_FLATPAK=0/1         flathub remotes (system+user) + /tmp deny
-#   QOL_FLATPAK_SYNC=0/1    .desktop+icon mirror to /usr/share via .path unit
+#   QOL_FLATPAK_SYNC=0/1    .desktop+icon mirror to /usr/share via 5min timer
 #   QOL_PULSE_DETACH=0/1    user oneshot to detach WSLg's pulse symlink
 #   QOL_THEME_SYNC=0/1      systemd user .timer that mirrors Windows theme
 #
