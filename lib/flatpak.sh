@@ -130,8 +130,15 @@ initial_flatpak_sync_run() {
   local manifest=/var/lib/wsl-flatpak-wslg-sync/$USER.list
   local before=0 after=0
   [ -s "$manifest" ] && before=$(sudo wc -l < "$manifest" 2>/dev/null || echo 0)
-  ui_spin "wsl-flatpak-wslg-sync $USER" \
-    sudo /usr/local/bin/wsl-flatpak-wslg-sync "$USER"
+  # Run via the systemd unit (not the direct script) so the unit's
+  # "last active" timestamp is set. The companion .timer uses
+  # OnUnitActiveSec=1min, which only starts counting AFTER the service
+  # has run at least once — without this kick the timer sits waiting
+  # forever and Start-Menu publishing never updates after the initial
+  # one-shot. The unit's ExecStart sudo's the same script, so this is
+  # equivalent to the direct invocation but with proper timer wiring.
+  ui_spin "wsl-flatpak-wslg-sync.service" \
+    systemctl --user start --wait wsl-flatpak-wslg-sync.service
   [ -s "$manifest" ] && after=$(sudo wc -l < "$manifest" 2>/dev/null || echo 0)
   if [ "$after" -gt "$before" ]; then
     export FLATPAKS_NEWLY_LINKED=1
