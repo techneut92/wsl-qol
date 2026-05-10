@@ -20,14 +20,30 @@
 
 # Always-on initial sync. Idempotent: re-runs just refresh the script
 # and re-fire it (which is itself a no-op when nothing changed).
+#
+# When invoked from a meta-installer that runs wsl-qol BEFORE the
+# GNOME stack is on disk (the RDP installer does this so binfmt /
+# flatpak / pulse-detach are in place when its dnf step starts), the
+# org.gnome.desktop.interface schema isn't registered yet, so the
+# gsettings tier of the script silently no-ops. We detect that
+# explicitly and skip the fire — the meta-installer is expected to
+# re-fire /usr/local/bin/wsl-theme-sync after its package install
+# step. Without this skip, the unhelpful-no-op surfaces as "everything
+# looks green" while color-scheme actually never propagates.
 oneshot_theme_sync() {
   ui_step "Theme sync (initial Windows → Linux mirror)"
   ui_spin "Install /usr/local/bin/wsl-theme-sync" \
     sudo install -m 755 \
       "$PROJECT_ROOT/extras/wsl-theme-sync/wsl-theme-sync" \
       /usr/local/bin/wsl-theme-sync
-  ui_spin "wsl-theme-sync (one-shot mirror)" \
-    /usr/local/bin/wsl-theme-sync
+  if command -v gsettings >/dev/null 2>&1 \
+     && gsettings list-schemas 2>/dev/null \
+        | grep -q '^org\.gnome\.desktop\.interface$'; then
+    ui_spin "wsl-theme-sync (one-shot mirror)" \
+      /usr/local/bin/wsl-theme-sync
+  else
+    ui_skip "GNOME schemas not registered yet — defer fire to caller"
+  fi
 }
 
 # Opt-in continuous-polling timer. Adds the .service + .timer units
