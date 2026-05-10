@@ -8,6 +8,14 @@
 #
 # Env knobs:
 #   QOL_BINFMT=0/1          [default 1] /etc/binfmt.d/WSLInterop.conf + reload
+#   QOL_WSLU=0/1            [default 1] wslu (provides wslview — forwards
+#                                       xdg-open URLs to Windows browser, fixes
+#                                       az login / gh auth login on stripped WSL).
+#                                       Auto-enables atim/wslu COPR on Fedora.
+#   QOL_XDG_DIRS=0/1        [default 1] populate ~/.config/user-dirs.dirs with
+#                                       the standard XDG dirs + create a
+#                                       ~/Projects folder. Desktop-agnostic —
+#                                       no Nautilus/sidebar bookmarks here.
 #   QOL_FLATPAK=0/1         [default 1] flathub remotes (system+user) + /tmp deny
 #   QOL_FLATPAK_SYNC=0/1    [default 1] .desktop+icon mirror to /usr/share via 1min timer
 #   QOL_PULSE_DETACH=0/1    [default 1] user oneshot to detach WSLg's pulse symlink
@@ -41,6 +49,10 @@ export PROJECT_ROOT
 . "$PROJECT_ROOT/lib/pulse_detach.sh"
 # shellcheck source=lib/theme_sync.sh
 . "$PROJECT_ROOT/lib/theme_sync.sh"
+# shellcheck source=lib/wslu.sh
+. "$PROJECT_ROOT/lib/wslu.sh"
+# shellcheck source=lib/xdg_dirs.sh
+. "$PROJECT_ROOT/lib/xdg_dirs.sh"
 
 SYSTEMD_USER_DIR="${SYSTEMD_USER_DIR:-$HOME/.config/systemd/user}"
 export SYSTEMD_USER_DIR
@@ -57,6 +69,8 @@ ui_detail "$DISTRO_ID ($DISTRO_FAMILY)"
 ui_phase "WSL QOL"
 
 [ "${QOL_BINFMT:-1}" = "1" ]       && install_wslinterop_binfmt
+[ "${QOL_WSLU:-1}" = "1" ]         && install_wslu
+[ "${QOL_XDG_DIRS:-1}" = "1" ]     && setup_xdg_user_dirs
 [ "${QOL_FLATPAK:-1}" = "1" ]      && setup_flatpak_remotes
 [ "${QOL_FLATPAK_SYNC:-1}" = "1" ] && install_wslg_flatpak_sync
 [ "${QOL_PULSE_DETACH:-1}" = "1" ] && install_wslg_pulse_detach
