@@ -11,13 +11,16 @@
 #   QOL_FLATPAK=0/1         [default 1] flathub remotes (system+user) + /tmp deny
 #   QOL_FLATPAK_SYNC=0/1    [default 1] .desktop+icon mirror to /usr/share via 1min timer
 #   QOL_PULSE_DETACH=0/1    [default 1] user oneshot to detach WSLg's pulse symlink
-#   QOL_THEME_SYNC=0/1      [default 0] OPT-IN — systemd user .timer that mirrors
-#                                       Windows light/dark into GTK/gsettings/.ini.
-#                                       Off by default because it overwrites the
-#                                       user's GNOME theme + GTK_THEME env every
-#                                       minute; users who customize their RDP
-#                                       desktop theme don't want that. Enable
-#                                       with QOL_THEME_SYNC=1.
+#   QOL_THEME_SYNC=0/1      [default 0] Continuous-polling .timer that mirrors
+#                                       Windows light/dark into GTK/gsettings/.ini
+#                                       every minute. Off by default because it
+#                                       overwrites a user-customized RDP theme
+#                                       on every fire. Note: the ONE-SHOT
+#                                       mirror at install time always runs
+#                                       regardless of this knob — fresh installs
+#                                       still get a first-launch theme matching
+#                                       Windows, just without ongoing tracking.
+#                                       Enable with QOL_THEME_SYNC=1.
 #
 #   QOL_NONINTERACTIVE=1    suppress prompts (none today; reserved)
 
@@ -57,12 +60,15 @@ ui_phase "WSL QOL"
 [ "${QOL_FLATPAK:-1}" = "1" ]      && setup_flatpak_remotes
 [ "${QOL_FLATPAK_SYNC:-1}" = "1" ] && install_wslg_flatpak_sync
 [ "${QOL_PULSE_DETACH:-1}" = "1" ] && install_wslg_pulse_detach
-# Theme-sync default OFF — opt-in via QOL_THEME_SYNC=1.
-[ "${QOL_THEME_SYNC:-0}" = "1" ]   && install_theme_sync
+
+# Theme sync — always do the one-shot install-time mirror so fresh
+# installs match Windows light/dark on first GUI launch. The continuous
+# polling timer is opt-in via QOL_THEME_SYNC=1.
+oneshot_theme_sync
+[ "${QOL_THEME_SYNC:-0}" = "1" ]   && install_theme_sync_timer
 
 # Initial fire of the sync units so the user sees results without a reboot.
 [ "${QOL_FLATPAK_SYNC:-1}" = "1" ] && initial_flatpak_sync_run
-[ "${QOL_THEME_SYNC:-0}" = "1" ]   && initial_theme_sync_run
 
 ui_phase "Done"
 ui_ok "WSL QOL installed"
