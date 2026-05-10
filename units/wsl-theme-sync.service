@@ -8,6 +8,14 @@ After=default.target
 
 [Service]
 Type=oneshot
+# The user-systemd manager starts with a minimal PATH
+# (/usr/local/bin:/usr/bin) — WSL's /mnt/c/WINDOWS/system32 is grafted
+# onto PATH only by login-shell init scripts, NOT by systemd. Without
+# this Environment= line the script's `command -v reg.exe || exit 0`
+# guard fires every run, the service exits 0/SUCCESS silently, and
+# the theme never syncs. From a login shell the script works fine —
+# that mismatch is exactly how this bug hides.
+Environment=PATH=/usr/local/bin:/usr/bin:/mnt/c/WINDOWS/system32
 ExecStart=/usr/local/bin/wsl-theme-sync
 # Strict ceiling — the script wraps reg.exe + each gsettings call in
 # `timeout 3`, so a healthy run completes in well under a second. 15s
