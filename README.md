@@ -39,7 +39,7 @@ Fedora-/Debian-like WSL2 distro to get:
 ## Install
 
 ```sh
-git clone https://github.com/techneut92/wsl-qol.git
+git clone https://codeberg.org/techneut92/wsl-qol.git
 cd wsl-qol
 ./install.sh
 ```
@@ -59,7 +59,7 @@ QOL_THEME_SYNC=0      # skip theme sync timer
 
 - It does not install a desktop environment.
 - It does not configure RDP / `gnome-remote-desktop`. For that, see
-  [wsl-gnome-rdp-installer](https://github.com/techneut92/wsl-gnome-rdp-installer)
+  [wsl-gnome-rdp-installer](https://codeberg.org/techneut92/wsl-gnome-rdp-installer)
   which depends on this repo.
 
 ## Files dropped on disk
