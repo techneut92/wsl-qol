@@ -20,9 +20,26 @@
 
 set -eo pipefail
 
-# Skip silently if interop is dead — happens after `wsl --shutdown`
-# and before the binfmt drop-in re-registers.
-command -v reg.exe >/dev/null 2>&1 || exit 0
+# Make the script self-sufficient: graft Windows interop dirs onto
+# PATH so reg.exe is reachable regardless of how this script was
+# launched (login shell, systemd user unit, install-pipeline bash
+# subprocess, manual cron, etc). The user-systemd manager only has
+# /usr/local/bin:/usr/bin in PATH; login shells get the full Windows
+# graft via /etc/profile.d/wsl-integration.sh, but anything else
+# doesn't. Without this, `command -v reg.exe` returns nothing in those
+# contexts and the script silently exits 0, leaving the theme unchanged.
+case ":$PATH:" in
+  *":/mnt/c/WINDOWS/system32:"*) ;;
+  *) export PATH="$PATH:/mnt/c/WINDOWS/system32" ;;
+esac
+
+# Skip if interop is genuinely dead — happens after `wsl --shutdown`
+# and before the binfmt drop-in re-registers. Log to stderr so the
+# silent-no-op surfaces in the systemd journal instead of disappearing.
+if ! command -v reg.exe >/dev/null 2>&1; then
+  echo "wsl-theme-sync: reg.exe not on PATH; skipping (interop dead?)" >&2
+  exit 0
+fi
 
 # Hard-cap reg.exe at 5s. The interop path can hang indefinitely if
 # WSLInterop binfmt is wedged or the Windows side is congested —
@@ -42,7 +59,10 @@ done < <(timeout 5 reg.exe query \
            'HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize' \
            /v AppsUseLightTheme 2>/dev/null \
          | tr -d '\r')
-[ -n "$val" ] || exit 0
+if [ -z "$val" ]; then
+  echo "wsl-theme-sync: reg.exe returned no AppsUseLightTheme value (timeout? interop slow?); skipping" >&2
+  exit 0
+fi
 
 case "$val" in
   0x0)  # Dark
