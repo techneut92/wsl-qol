@@ -19,7 +19,13 @@
 install_wslu() {
   ui_step "wslu"
 
-  if [ -z "${WSL_DISTRO_NAME:-}" ]; then
+  # WSL_DISTRO_NAME is set by /init at WSL session start, but `sudo`
+  # strips it by default. Fall back to the kernel signal so this
+  # works whether wsl-qol was invoked from a login shell, a sudo
+  # boundary, or an upstream installer (dev-env-installer's bootstrap)
+  # that loses the var on the way through.
+  if [ -z "${WSL_DISTRO_NAME:-}" ] \
+     && ! grep -qiE 'microsoft|wsl' /proc/sys/kernel/osrelease 2>/dev/null; then
     ui_skip "not running under WSL"
     return 0
   fi
@@ -42,8 +48,14 @@ install_wslu() {
         ui_skip "wslu (no dnf — install manually)"
         return 0
       fi
-      ui_spin "Enable atim/wslu COPR" \
-        sudo dnf -y -q copr enable atim/wslu
+      # `wslutilities/wslu` is the upstream-maintained COPR
+      # (github.com/wslutilities/wslu owners). Enable + install.
+      # The `dnf copr enable` subcommand needs dnf-plugins-core;
+      # ensure it before the enable so the error path doesn't
+      # confuse "missing plugin" with "missing project".
+      sudo dnf -y -q install dnf-plugins-core >/dev/null 2>&1 || true
+      ui_spin "Enable wslutilities/wslu COPR" \
+        sudo dnf -y -q copr enable wslutilities/wslu
       ui_spin "Install wslu (dnf)" \
         sudo dnf -y -q install wslu
       ;;
