@@ -24,10 +24,27 @@
 setup_xdg_user_dirs() {
   ui_step "XDG user dirs + ~/Projects"
 
+  # Install xdg-user-dirs if missing — same pattern as wslu.sh. Package
+  # name is `xdg-user-dirs` on both Fedora and Debian. Without it the
+  # `--set NAME PATH` loop below has nothing to call; skipping leaves
+  # Nautilus / file-dialog sidebars without Documents/Music/Pictures/
+  # Videos entries, which is exactly what this tier exists to fix.
   if ! command -v xdg-user-dirs-update >/dev/null 2>&1; then
-    ui_skip "xdg-user-dirs-update not on PATH (xdg-user-dirs not installed)"
-    ui_detail "install it via your package manager if you want sidebar dir entries"
-    return 0
+    case "$DISTRO_FAMILY" in
+      fedora-like)
+        ui_spin "Install xdg-user-dirs (dnf)" \
+          sudo dnf install -y -q xdg-user-dirs
+        ;;
+      debian-like)
+        export DEBIAN_FRONTEND=noninteractive
+        ui_spin "Install xdg-user-dirs (apt)" \
+          sudo apt-get install -y -qq xdg-user-dirs
+        ;;
+      *)
+        ui_skip "no $DISTRO_FAMILY recipe — install xdg-user-dirs manually for sidebar dir entries"
+        return 0
+        ;;
+    esac
   fi
 
   local pair name dir
